@@ -1,0 +1,11 @@
+{
+  "name": "cc-tamagotchi-scripts",
+  "private": true,
+  "type": "module",
+  "description": "Tools that make the README's pictures. Not part of the mod: the mod needs no install.",
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "dejavu-fonts-ttf": "^2.37.3",
+    "gifenc": "^1.0.3"
+  }
+}

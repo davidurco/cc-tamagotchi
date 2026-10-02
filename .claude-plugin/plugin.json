@@ -1,0 +1,11 @@
+{
+  "name": "cc-tamagotchi",
+  "version": "0.1.0",
+  "description": "A Tamagotchi that lives in Claude Code: it hatches, eats the work Claude does, leaves bugs behind, gets sick, throws tantrums and grows into one of eight adults. An animated pixel LCD in the terminal, an egg-shaped device in the desktop app. Zero tokens.",
+  "author": { "name": "David Ďurčo", "url": "https://github.com/davidurco" },
+  "homepage": "https://github.com/davidurco/cc-tamagotchi",
+  "repository": "https://github.com/davidurco/cc-tamagotchi",
+  "license": "MIT",
+  "keywords": ["tamagotchi", "virtual-pet", "pet", "pixel-art", "game", "terminal", "tui", "mod", "function-hooks"],
+  "types": "./types/index.d.ts"
+}

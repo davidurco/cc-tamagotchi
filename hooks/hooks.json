@@ -1,0 +1,4 @@
+{
+  "description": "cc-tamagotchi: the pet's life, its screens and /tama",
+  "modules": ["./register.tsx"]
+}

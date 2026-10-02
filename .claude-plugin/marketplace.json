@@ -1,0 +1,15 @@
+{
+  "name": "cc-tamagotchi",
+  "owner": { "name": "David Ďurčo", "url": "https://github.com/davidurco" },
+  "metadata": { "description": "cc-tamagotchi: a virtual pet that lives in Claude Code" },
+  "plugins": [
+    {
+      "name": "cc-tamagotchi",
+      "source": "./",
+      "description": "A Tamagotchi that lives in Claude Code: it hatches, eats the work Claude does, leaves bugs behind, gets sick and grows into one of eight adults. Zero tokens.",
+      "homepage": "https://github.com/davidurco/cc-tamagotchi",
+      "repository": "https://github.com/davidurco/cc-tamagotchi",
+      "license": "MIT"
+    }
+  ]
+}

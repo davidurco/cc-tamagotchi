@@ -1,0 +1,24 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+# it only reads the checkout
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # the mod needs no install; Claude Code itself validates and tests it, offline
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: claude --version
+      - run: claude plugin validate ./.claude-plugin/plugin.json
+      - run: claude plugin validate .
+      - run: claude plugin test .
