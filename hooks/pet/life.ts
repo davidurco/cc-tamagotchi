@@ -245,11 +245,14 @@ function minute(pet: Pet, t: number, mode: Settings['mode'], events: LifeEvent[]
   }
 
   // hard neglect: starving and miserable, or sick. In classic mode, half an awake day of it and it leaves.
+  // Gentle mode counts none of it, so switching to classic starts the count from nothing.
   const isHard = (pet.hunger <= 0 && pet.happy <= 0) || pet.sick > 0
-  pet.neglect = isHard ? pet.neglect + f : Math.max(0, pet.neglect - f / 2)
-  if (mode === 'classic' && pet.neglect >= DEPART_AFTER) {
+  if (mode === 'gentle') pet.neglect = 0
+  else pet.neglect = isHard ? Math.min(DEPART_AFTER, pet.neglect + f) : Math.max(0, pet.neglect - f / 2)
+  if (mode === 'classic' && isHard && pet.neglect >= DEPART_AFTER) {
     pet.gone = { at: t, cause: 'neglect' }
     pet.asleep = false
+    pet.calling = null
     events.push({ kind: 'departed' })
   }
 }
@@ -291,6 +294,14 @@ export function adultFor(pet: Pet): SpeciesId {
   return scores.reduce((best, one) => (one[1] > best[1] ? one : best))[0]
 }
 
+/** After care or work, what it calls about is what it needs now: a fed pet stops calling hungry at once. */
+function settle(out: Outcome): Outcome {
+  const pet = out.pet
+  const need = needOf(pet)
+  if (need === pet.calling) return out
+  return { ...out, pet: { ...pet, calling: need, callWait: 0, callingCounted: false } }
+}
+
 // ── the person's care ───────────────────────────────────────────────────────────────────────
 
 export type Care = 'meal' | 'snack' | 'clean' | 'medicine' | 'lights' | 'scold' | 'pat'
@@ -299,6 +310,10 @@ export type Outcome = { pet: Pet; reaction?: ReactionKind; say?: string; ok: boo
 
 /** What the person did. The pet is assumed ticked to `now` already. */
 export function care(p: Pet, what: Care, now: number): Outcome {
+  return settle(careFor(p, what, now))
+}
+
+function careFor(p: Pet, what: Care, now: number): Outcome {
   if (p.gone) return { pet: p, ok: false, say: `${p.name} is not here any more` }
   if (p.species === 'egg') return { pet: p, ok: false, say: 'it is still an egg: give it a minute' }
   const pet = clone(p)
@@ -391,6 +406,10 @@ export function canPlay(p: Pet): string | null {
 
 /** A finished game of five rounds. Three wins lift its mood; any game burns a gram. */
 export function played(p: Pet, wins: number, now: number): Outcome {
+  return settle(playedFor(p, wins, now))
+}
+
+function playedFor(p: Pet, wins: number, now: number): Outcome {
   const pet = clone(p)
   pet.asleep = false
   pet.tucked = false
@@ -416,10 +435,22 @@ export function startVacation(p: Pet, now: number): Pet {
   return p.vacation !== null || p.gone ? p : { ...p, vacation: now }
 }
 
-/** Ends a vacation: the time away never happened. */
+/** Ends a vacation: the time away never happened, so its age and its growth skip it too. */
 export function endVacation(p: Pet, now: number): Pet {
   if (p.vacation === null) return p
-  return { ...p, vacation: null, at: now, lastActive: now, asleep: false, tucked: false, lastMeal: null }
+  const away = Math.max(0, now - p.vacation)
+  return {
+    ...p,
+    vacation: null,
+    born: p.born + away,
+    hatchedAt: p.hatchedAt === null ? null : p.hatchedAt + away,
+    evolvedAt: p.evolvedAt + away,
+    at: now,
+    lastActive: now,
+    asleep: false,
+    tucked: false,
+    lastMeal: null,
+  }
 }
 
 export function memorialOf(p: Pet): Memorial {
@@ -446,20 +477,37 @@ const SEARCHES = new Set(['Read', 'Grep', 'Glob', 'LS', 'WebSearch', 'WebFetch',
 const AGENTS = new Set(['Task', 'Agent'])
 const SHELLS = new Set(['Bash', 'PowerShell'])
 
-// test runners across the usual stacks; a run that ends in error failed
-const TEST_COMMAND =
-  /\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b|\bnpx\s+(?:jest|vitest|mocha|playwright\s+test|ava|tap)\b|\b(?:pytest|jest|vitest|rspec|phpunit|mocha|tox|nox|ctest)\b|\bpython3?\s+-m\s+(?:pytest|unittest)\b|\bgo\s+test\b|\bcargo\s+(?:test|nextest)\b|\bmake\s+(?:test|check)\b|\b(?:mvn|gradle|gradlew|sbt)\b.*\btest\b|\bdotnet\s+test\b|\bmix\s+test\b|\bdeno\s+test\b|\bswift\s+test\b|\bplugin\s+test\b/
+// Test runners across the usual stacks, matched where a command starts (after any `cd x &&`, an
+// env assignment or `npx`), so `cat jest.config.js` or a commit message that names pytest is not a run.
+const TEST_START =
+  /^(?:(?:npx|bunx|pnpx|pnpm\s+(?:exec|dlx)|yarn\s+(?:exec|dlx)|uv\s+run|poetry\s+run|pipenv\s+run|hatch\s+run)\s+)?(?:jest|vitest|mocha|ava|tap|pytest|rspec|phpunit|tox|nox|ctest|playwright\s+test)\b|^(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b|^python3?\s+-m\s+(?:pytest|unittest)\b|^go\s+test\b|^cargo\s+(?:test|nextest)\b|^make\s+(?:test|check)\b|^(?:\.\/)?(?:mvn|mvnw|gradle|gradlew|sbt)\b.*\btest\b|^dotnet\s+test\b|^mix\s+test\b|^deno\s+test\b|^swift\s+test\b|^(?:claude\s+)?plugin\s+test\b/
+
+/** The commands of a shell line, each without leading env assignments or wrappers. */
+export function commandsOf(line: string): string[] {
+  return line
+    .split(/&&|\|\||;|\||\n/)
+    .map(part =>
+      part
+        .trim()
+        .replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)+/, '')
+        .replace(/^(?:time|sudo|exec|env|command|nice)\s+/, ''),
+    )
+    .filter(Boolean)
+}
+
+const isGit = (part: string, verb: string) => new RegExp(`^git\\s+(?:-C\\s+\\S+\\s+|-c\\s+\\S+\\s+)*${verb}\\b`).test(part) && !/--dry-run\b/.test(part)
 
 /**
  * What a finished tool call was, for the pet: `ok` is false when the tool failed and undefined
- * when the call was refused (which feeds nothing). Tests are told apart by their command.
+ * when the call was refused (which feeds nothing). Shell lines are read command by command.
  */
 export function classify(tool: string, command: string | undefined, ok: boolean | undefined): { work: Work; isError: boolean } | null {
   if (ok === undefined) return null
   if (SHELLS.has(tool) && command) {
-    if (TEST_COMMAND.test(command)) return { work: ok ? 'test-pass' : 'test-fail', isError: false }
-    if (ok && /\bgit\s+commit\b/.test(command) && !/--dry-run\b/.test(command)) return { work: 'commit', isError: false }
-    if (ok && /\bgit\s+push\b/.test(command) && !/--dry-run\b/.test(command)) return { work: 'push', isError: false }
+    const parts = commandsOf(command)
+    if (ok && parts.some(part => isGit(part, 'commit'))) return { work: 'commit', isError: false }
+    if (ok && parts.some(part => isGit(part, 'push'))) return { work: 'push', isError: false }
+    if (parts.some(part => TEST_START.test(part))) return { work: ok ? 'test-pass' : 'test-fail', isError: false }
     return { work: 'shell', isError: !ok }
   }
   if (EDITS.has(tool)) return { work: ok ? 'edit' : 'other', isError: !ok }
@@ -477,6 +525,10 @@ export function touch(p: Pet, now: number): { pet: Pet; woke: boolean } {
 
 /** One tool call Claude finished. The pet is assumed ticked to `now` already. */
 export function work(p: Pet, w: Work, isError: boolean, now: number): Outcome {
+  return settle(workFor(p, w, isError, now))
+}
+
+function workFor(p: Pet, w: Work, isError: boolean, now: number): Outcome {
   if (p.gone) return { pet: p, ok: false }
   const pet = touch(clone(p), now).pet
   const s = pet.stats

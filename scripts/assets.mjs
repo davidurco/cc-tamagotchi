@@ -132,6 +132,32 @@ function evolution() {
   png(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="590"><rect width="100%" height="100%" rx="16" fill="#fbfaf7"/>${body}</svg>`, 'evolution.png', 1.5)
 }
 
+// ── the card a link to the repository unfurls into ─────────────────────────────────────────
+
+function social() {
+  const device = (shell, species, name, uid, t, extra = {}) =>
+    inner(deviceSvg({ input: { ...BASE, species, working: true, ...extra }, rt: null, name, shell, uid, icons: ICONS, at: { t, rt: null } }))
+  const body = [
+    `<rect width="1280" height="640" fill="#f6f1e8"/>`,
+    `<circle cx="330" cy="330" r="270" fill="#efe6d6"/>`,
+    `<g transform="translate(36 236) scale(1.25)" opacity="0.95">${device('mint', 'assertoise', 'Tofu', 'm', 1900)}</g>`,
+    `<g transform="translate(350 236) scale(1.25)" opacity="0.95">${device('grape', 'owlgorithm', 'Nori', 'g', 3100)}</g>`,
+    `<g transform="translate(150 70) scale(1.8)">${device('coral', 'refactopus', 'Mochi', 'c', 600, { reaction: { kind: 'cheer', id: 1 } })}</g>`,
+    `<text x="700" y="250" font-family="DejaVu Sans" font-weight="700" font-size="64" fill="#2c2f36">cc-tamagotchi</text>`,
+    `<text x="702" y="310" font-family="DejaVu Sans" font-size="28" fill="#555a63">A Tamagotchi that lives</text>`,
+    `<text x="702" y="348" font-family="DejaVu Sans" font-size="28" fill="#555a63">inside Claude Code.</text>`,
+    `<text x="702" y="418" font-family="DejaVu Sans" font-size="21" fill="#7a7f87">It hatches, eats the code Claude writes,</text>`,
+    `<text x="702" y="448" font-family="DejaVu Sans" font-size="21" fill="#7a7f87">leaves bugs behind, and grows into</text>`,
+    `<text x="702" y="478" font-family="DejaVu Sans" font-size="21" fill="#7a7f87">one of eight adults.</text>`,
+    `<rect x="700" y="516" width="186" height="40" rx="20" fill="${SHELLS.coral.base}"/>`,
+    `<text x="793" y="542" text-anchor="middle" font-family="DejaVu Sans" font-weight="700" font-size="17" fill="#ffffff">Claude Code mod</text>`,
+    `<rect x="900" y="516" width="150" height="40" rx="20" fill="${LCD.bg}"/>`,
+    `<text x="975" y="542" text-anchor="middle" font-family="DejaVu Sans" font-weight="700" font-size="17" fill="${LCD.ink}">zero tokens</text>`,
+  ].join('')
+  png(`<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640">${body}</svg>`, 'social.png', 1)
+}
+
 hero()
 shells()
 evolution()
+social()

@@ -84,6 +84,28 @@ describe('life', () => {
     expect(tick(pet, T0 + 3 * DAY, 'gentle').pet.gone).toBeNull()
   })
 
+  test('switching from gentle to classic never sends a pet off for neglect long past', () => {
+    const pet = hatched({ hunger: 0, happy: 0, lastActive: T0 + 99 * DAY })
+    const neglected = tick(pet, T0 + 10 * DAY, 'gentle').pet
+    expect(neglected.neglect).toBe(0)
+    // even sick and starving, classic only starts counting now
+    expect(tick(neglected, T0 + 10 * DAY + 5 * MINUTE, 'classic').pet.gone).toBeNull()
+    expect(tick(neglected, T0 + 10 * DAY + (DEPART_AFTER + 5) * MINUTE, 'classic').pet.gone).not.toBeNull()
+  })
+
+  test('care answers a call at once', () => {
+    const hungry = tick(hatched({ hunger: 0.1, lastActive: T0 + 99 * HOUR }), T0 + 5 * MINUTE).pet
+    expect(hungry.calling).toBe('hungry')
+    expect(care(hungry, 'meal', T0 + 5 * MINUTE).pet.calling).toBeNull()
+  })
+
+  test('a vacation stops its clock, its age included', () => {
+    const away = startVacation(hatched({ hatchedAt: T0 - DAY }), T0)
+    const back = endVacation(away, T0 + 5 * DAY)
+    expect(back.hatchedAt).toBe(T0 + 4 * DAY)
+    expect(back.evolvedAt).toBe(T0 + 5 * DAY)
+  })
+
   test('a vacation stops its clock', () => {
     const away = startVacation(hatched(), T0)
     expect(tick(away, T0 + 5 * DAY).pet).toBe(away)
@@ -168,6 +190,19 @@ describe('life', () => {
     expect(classify('Agent', undefined, true)?.work).toBe('agent')
     // a refused call feeds nothing
     expect(classify('Bash', 'bun test', undefined)).toBeNull()
+  })
+
+  test('a test runner counts only where a command starts, and a commit is a commit', () => {
+    expect(classify('Bash', 'cd web && npx vitest run', true)?.work).toBe('test-pass')
+    expect(classify('Bash', 'CI=1 pytest -q', false)?.work).toBe('test-fail')
+    expect(classify('Bash', 'go test ./... | tee out.txt', true)?.work).toBe('test-pass')
+    expect(classify('Bash', 'cat jest.config.js', true)?.work).toBe('shell')
+    expect(classify('Bash', 'npm i -D vitest', true)?.work).toBe('shell')
+    expect(classify('Bash', 'grep -rn mocha .', true)?.work).toBe('shell')
+    expect(classify('Bash', 'echo "run pytest later"', true)?.work).toBe('shell')
+    expect(classify('Bash', 'git commit -m "fix pytest fixture"', true)?.work).toBe('commit')
+    expect(classify('Bash', 'npm test && git commit -m "x"', true)?.work).toBe('commit')
+    expect(classify('Bash', 'git -C repo push origin main', true)?.work).toBe('push')
   })
 
   test('it grows with age and with the work it watches', () => {

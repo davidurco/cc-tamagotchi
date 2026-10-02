@@ -1,6 +1,6 @@
 {
   "name": "cc-tamagotchi",
-  "owner": { "name": "David Ďurčo", "url": "https://github.com/davidurco" },
+  "owner": { "name": "David Durco", "url": "https://github.com/davidurco" },
   "metadata": { "description": "cc-tamagotchi: a virtual pet that lives in Claude Code" },
   "plugins": [
     {

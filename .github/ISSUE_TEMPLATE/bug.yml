@@ -1,0 +1,47 @@
+name: Bug report
+description: Something about the pet or its screens is broken
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead. A screenshot helps.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Claude Code version
+      description: The output of `claude --version`
+      placeholder: 2.1.287 (Claude Code)
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where you run it
+      options:
+        - Terminal
+        - Claude desktop app (Code tab)
+        - VS Code extension
+        - claude -p / Agent SDK
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal and OS
+      placeholder: Ghostty on macOS 26
+  - type: textarea
+    id: stats
+    attributes:
+      label: /tama stats
+      description: Its form, age and care, if the pet is involved
+  - type: textarea
+    id: log
+    attributes:
+      label: Debug log
+      description: Any `cc-tamagotchi` lines from `claude --debug`
+      render: text

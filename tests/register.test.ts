@@ -70,6 +70,8 @@ describe('register', () => {
     await start($)
     await w.clock.advance(61_000)
     await $.tool.call({ tool: 'Read', file_path: 'README.md' })
+    // the pet follows a tool call in the background: let that finish
+    await w.clock.settle()
     expect(w.pet().species).toBe('bit')
     expect(w.toasts.some(t => t.includes('hatched'))).toBe(true)
   })
@@ -80,6 +82,7 @@ describe('register', () => {
     await $.tool.call({ tool: 'Edit', file_path: 'a.ts', old_string: 'a', new_string: 'b' })
     await $.tool.call({ tool: 'Bash', command: 'bun test --fail' })
     await $.tool.call({ tool: 'Bash', command: 'git commit -m "feat: pet"' })
+    await w.clock.settle()
     const pet = w.pet()
     expect(pet.stats).toMatchObject({ edits: 1, testFails: 1, commits: 1, toolCalls: 3 })
     expect(pet.bugs).toBe(1)
@@ -173,6 +176,39 @@ describe('register', () => {
       expect(await busy.find({ type: surface === 'terminal' ? 'Client' : 'Svg' })).toBeDefined()
       await busy.unmount()
     }
+  })
+
+  test('growing up is the moment: the edit that grows it does not replace the animation', async ($, on) => {
+    const w = world(on, { pet: grown({ species: 'bit', hatchedAt: T0 - 2 * 3_600_000, stats: { ...grown().stats, toolCalls: 39 } }) })
+    await start($)
+    await $.tool.call({ tool: 'Edit', file_path: 'a.ts', old_string: 'a', new_string: 'b' })
+    await w.clock.settle()
+    expect(w.pet().species).toBe('nibble')
+    expect(w.toasts.some(t => t.includes('grew into a Nibble'))).toBe(true)
+    const ui = await $.ui.mount({ ...PANE(60), surface: 'terminal' })
+    const lcd = await ui.find({ type: 'Client' })
+    expect((lcd?.props as { props: { input: { reaction: { kind: string; from?: string } } } }).props.input.reaction).toMatchObject({ kind: 'evolve', from: 'bit' })
+  })
+
+  test("settings another session changed hold here too: gentle keeps a neglected pet", async ($, on) => {
+    const w = world(on, { pet: grown({ hunger: 0, happy: 0, neglect: 700, lastActive: T0 + 99 * 3_600_000 }) })
+    await start($)
+    // another session switches to gentle after this one started
+    w.saved.set('settings', { band: 'auto', spinner: true, sound: false, mode: 'gentle', shell: 'coral' })
+    await w.clock.advance(60 * 60_000)
+    expect(w.pet().gone).toBeNull()
+    await tama($, 'Sound on')
+    expect(w.saved.get('settings')).toMatchObject({ mode: 'gentle', sound: true, spinner: true })
+  })
+
+  test('a pet that leaves joins the hall of fame the store already has', async ($, on) => {
+    const earlier = { name: 'Tofu', species: 'glitchy', generation: 1, born: T0 - 9e8, gone: T0 - 5e8, toolCalls: 10, commits: 1 }
+    const w = world(on, { pet: grown({ hunger: 0, happy: 0, neglect: 719, lastActive: T0 + 99 * 3_600_000 }) })
+    await start($)
+    w.saved.set('graveyard', [earlier])
+    await w.clock.advance(2 * 60_000)
+    expect(w.pet().gone).not.toBeNull()
+    expect((w.saved.get('graveyard') as unknown[]).length).toBe(2)
   })
 
   test('a gone pet leaves a memorial and a new egg on request', async ($, on) => {

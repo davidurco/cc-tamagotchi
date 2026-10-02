@@ -76,15 +76,17 @@ async function isPaneUp($: Engine): Promise<boolean> {
 
 // ── the pet in the store ────────────────────────────────────────────────────────────────────
 
+/** The settings as the store has them now (another session may have changed them), shown as well. */
 async function loadSettings($: Engine): Promise<Settings> {
   const saved = await $.store.get('settings').catch(() => undefined)
-  const settings = { ...DEFAULT_SETTINGS, ...(isSettings(saved) ? saved : {}) }
-  await update($, settingsAtom, () => settings)
+  const settings = { ...DEFAULT_SETTINGS, ...(isSettings(saved) ? saved : {}) } as Settings
+  const shown = await read($, settingsAtom)
+  if (JSON.stringify(shown) !== JSON.stringify(settings)) await update($, settingsAtom, () => settings)
   return settings
 }
 
 async function saveSettings($: Engine, patch: Partial<Settings>): Promise<Settings> {
-  const settings = { ...(await read($, settingsAtom)), ...patch }
+  const settings = { ...(await loadSettings($)), ...patch }
   await update($, settingsAtom, () => settings)
   await $.store.set('settings', settings).catch(err => $.ui.log(`cc-tamagotchi: settings not saved: ${err}`, { to: 'debug' }))
   return settings
@@ -103,24 +105,33 @@ async function loadGraveyard($: Engine): Promise<Memorial[]> {
  */
 function change($: Engine, fn: ((pet: Pet, now: number) => Outcome | null) | null): Promise<Outcome | null> {
   const run = async (): Promise<Outcome | null> => {
-    const now = await $.clock.now()
-    const settings = await read($, settingsAtom)
-    const saved = await $.store.get('pet').catch(() => undefined)
-    const stored = isPet(saved) ? revive(saved) : newPet(now)
-    const { pet: ticked, events } = tick(stored, now, settings.mode)
-    const out = fn ? fn(ticked, now) : null
-    // what the change brings about at once: the tool call that hatches the egg, the one that grows it
-    const after = out ? tick(out.pet, now, settings.mode) : { pet: ticked, events: [] }
-    events.push(...after.events)
-    const pet = after.pet
-    const isNew = !isPet(saved) || JSON.stringify(pet) !== JSON.stringify(stored)
-    const next = isNew ? { ...pet, rev: stored.rev + 1 } : stored
-    if (isNew) await $.store.set('pet', next).catch(err => $.ui.log(`cc-tamagotchi: pet not saved: ${err}`, { to: 'debug' }))
-    await update($, petAtom, () => next)
-    await announce($, events, next, settings)
-    if (out?.reaction) await react($, out.reaction)
-    if (out?.say) await say($, out.say)
-    return out
+    const settings = await loadSettings($)
+    for (let attempt = 0; ; attempt++) {
+      const now = await $.clock.now()
+      const saved = await $.store.get('pet').catch(() => undefined)
+      const stored = isPet(saved) ? revive(saved) : newPet(now)
+      const { pet: ticked, events } = tick(stored, now, settings.mode)
+      const out = fn ? fn(ticked, now) : null
+      // what the change brings about at once: the tool call that hatches the egg, the one that grows it
+      const after = out ? tick(out.pet, now, settings.mode) : { pet: ticked, events: [] }
+      events.push(...after.events)
+      const pet = after.pet
+      const isNew = !isPet(saved) || JSON.stringify(pet) !== JSON.stringify(stored)
+      const next = isNew ? { ...pet, rev: stored.rev + 1 } : stored
+      if (isNew) {
+        // another session wrote since the read: do it again from theirs (the store has no compare-and-set)
+        const again = await $.store.get('pet').catch(() => undefined)
+        if (attempt < 2 && isPet(again) && isPet(saved) && again.rev !== saved.rev) continue
+        await $.store.set('pet', next).catch(err => $.ui.log(`cc-tamagotchi: pet not saved: ${err}`, { to: 'debug' }))
+      }
+      await update($, petAtom, () => next)
+      await announce($, events, next, settings)
+      // hatching and growing up are the moment: the tool call that caused them waits its turn
+      const grew = events.some(ev => ev.kind === 'hatched' || ev.kind === 'evolved')
+      if (out?.reaction && !grew) await react($, out.reaction)
+      if (out?.say && !grew) await say($, out.say)
+      return out
+    }
   }
   const p = queue.then(run, run)
   queue = p.catch(() => undefined)
@@ -138,6 +149,7 @@ async function say($: Engine, text: string): Promise<void> {
   const now = await $.clock.now()
   await update($, speechAtom, () => ({ text, at: now }))
   $.clock.after(SPEECH_MS + 80, () => $.ui.invalidate('ui.render'))
+  $.clock.after(BAND_AFTER_MS + 80, () => $.ui.invalidate('ui.render'))
 }
 
 function beep($: Engine, settings: Settings): void {
@@ -168,7 +180,8 @@ async function announce($: Engine, events: LifeEvent[], pet: Pet, settings: Sett
         beep($, settings)
         break
       case 'departed': {
-        const list = [...(await read($, graveAtom)), memorialOf(pet)].slice(-50)
+        const saved = await $.store.get('graveyard').catch(() => undefined)
+        const list = [...(Array.isArray(saved) ? (saved as Memorial[]) : []), memorialOf(pet)].slice(-50)
         await update($, graveAtom, () => list)
         await $.store.set('graveyard', list).catch(() => undefined)
         $.ui.toast(`${pet.name} has left for the cloud. /tama to see`, { timeoutMs: 10000 })
@@ -201,7 +214,16 @@ async function startGame($: Engine): Promise<void> {
   await update($, viewAtom, () => 'game')
 }
 
-async function guess($: Engine, dir: 'left' | 'right'): Promise<void> {
+// one guess at a time, so two quick presses play two rounds and a game ends once
+let guesses: Promise<unknown> = Promise.resolve()
+
+function guess($: Engine, dir: 'left' | 'right'): Promise<void> {
+  const p = guesses.then(() => guessNow($, dir))
+  guesses = p.catch(() => undefined)
+  return p
+}
+
+async function guessNow($: Engine, dir: 'left' | 'right'): Promise<void> {
   const game = await read($, gameAtom)
   if (!game || game.isOver) return
   const answer: 'left' | 'right' = Math.random() < 0.5 ? 'left' : 'right'
@@ -276,7 +298,8 @@ async function runCommand($: Engine, args: string): Promise<void> {
   const [verb = '', ...rest] = args.trim().split(/\s+/)
   const arg = rest.join(' ').trim()
   const on = (v: string) => (v === 'on' || v === 'true' ? true : v === 'off' || v === 'false' ? false : null)
-  switch (verb.toLowerCase()) {
+  const v = verb.toLowerCase()
+  switch (v) {
     case '':
       if (await isPaneUp($)) {
         await $.ui.close({ id: PANE })
@@ -354,10 +377,10 @@ async function runCommand($: Engine, args: string): Promise<void> {
     case 'spinner':
     case 'sound': {
       const value = on(arg)
-      const current = await read($, settingsAtom)
-      const next = value ?? !current[verb === 'sound' ? 'sound' : 'spinner']
-      await saveSettings($, verb === 'sound' ? { sound: next } : { spinner: next })
-      $.ui.toast(`${verb}: ${next ? 'on' : 'off'}`)
+      const current = await loadSettings($)
+      const next = value ?? !current[v === 'sound' ? 'sound' : 'spinner']
+      await saveSettings($, v === 'sound' ? { sound: next } : { spinner: next })
+      $.ui.toast(`${v}: ${next ? 'on' : 'off'}`)
       return
     }
     case 'mode':
@@ -457,7 +480,7 @@ function icons(p: Pet) {
     bath: p.bugs > 0,
     meter: false,
     discipline: p.tantrum,
-    attention: p.calling !== null,
+    attention: p.calling !== null && !p.gone,
   }
 }
 
@@ -860,7 +883,8 @@ export const register: Register = on => {
     const r = await next(e)
     const shellCommand = (e as { command?: unknown }).command
     const kind = classify(e.tool, typeof shellCommand === 'string' ? shellCommand : undefined, 'deny' in r && r.deny !== undefined ? undefined : r.isError !== true)
-    if (kind) await change($, (pet, now) => (pet.vacation !== null ? null : work(pet, kind.work, kind.isError, now)))
+    // the pet follows the tool's result; it never holds it up
+    if (kind) void change($, (pet, now) => (pet.vacation !== null ? null : work(pet, kind.work, kind.isError, now))).catch(() => undefined)
     return r
   })
 
@@ -874,14 +898,14 @@ export const register: Register = on => {
     if (e.agentId === undefined) {
       await update($, workingAtom, () => false)
       const tokens = e.usage?.output_tokens ?? 0
-      await change($, (pet, now) => (pet.vacation !== null ? null : { pet: turnDone(pet, tokens, new Date(now).getHours(), now), ok: true }))
+      void change($, (pet, now) => (pet.vacation !== null ? null : { pet: turnDone(pet, tokens, new Date(now).getHours(), now), ok: true })).catch(() => undefined)
     }
     return r
   })
 
   // a prompt wakes a napping pet
   on('prompt.submit', async ($, e, next) => {
-    await change($, (pet, now) => (pet.asleep && !pet.tucked ? { pet: { ...pet, asleep: false, lastActive: now }, ok: true, reaction: 'wake' } : null))
+    void change($, (pet, now) => (pet.asleep && !pet.tucked ? { pet: { ...pet, asleep: false, lastActive: now }, ok: true, reaction: 'wake' } : null)).catch(() => undefined)
     return next(e)
   })
 
@@ -922,7 +946,8 @@ export const register: Register = on => {
     const lively = e.props.isWorking || pet.species === 'egg' || isReacting(c) || (c.speech !== null && c.now - c.speech.at < BAND_AFTER_MS)
     // auto and big: the strip while something is going on, else one line; on: the strip always
     const blocks = c.settings.band === 'big'
-    const big = e.props.maxRows >= (blocks ? 10 : 6) && (c.settings.band === 'on' || ((c.settings.band === 'auto' || blocks) && lively))
+    // below 60 columns the strip and its side text do not fit: one line it is
+    const big = e.props.bodyColumns >= 60 && e.props.maxRows >= (blocks ? 10 : 6) && (c.settings.band === 'on' || ((c.settings.band === 'auto' || blocks) && lively))
     const shell = SHELLS[c.settings.shell] ?? SHELLS.coral
     let mine: unknown
     if (!big) {

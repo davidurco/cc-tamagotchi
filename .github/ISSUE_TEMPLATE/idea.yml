@@ -1,0 +1,17 @@
+name: Idea or new creature
+description: A new adult, an animation, a game, a reaction to something Claude does
+labels: [idea]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What should the pet do or become? For a creature, what grows it, and a name with a pun in it.
+    validations:
+      required: true
+  - type: textarea
+    id: sprite
+    attributes:
+      label: A sprite, if you have one
+      description: 16×16 at most, `#` for on and `.` for off (see CONTRIBUTING.md)
+      render: text

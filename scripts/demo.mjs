@@ -57,7 +57,7 @@ try {
   await sleep(800)
   keys(S, 'C-m')
   await sleep(2500)
-  const paneCols = [COLS - 75, COLS]
+  const paneCols = [COLS - 72, COLS]
   const pane = recorder(S, { cols: paneCols, rows: [0, 30] })
   await pane.take(2600)
   keys(S, 'f')
@@ -76,8 +76,7 @@ try {
   await pane.take(2600)
   window(S, path.join(docs, 'terminal.png'), 'claude — cc-tamagotchi', /\/passes|Share Claude Code|usage credits/)
   keys(S, 'i')
-  await sleep(700)
-  pane.still(path.join(docs, 'stats.png'))
+  await pane.take(1600)
   keys(S, 'b')
   await pane.take(800)
   pane.gif(path.join(docs, 'pane.gif'))
@@ -101,7 +100,6 @@ try {
   const band = recorder(S, { rows: [ROWS - 12, ROWS - 3] })
   await band.take(4200)
   band.gif(path.join(docs, 'band.gif'))
-  band.still(path.join(docs, 'band.png'))
 } finally {
   try {
     tmux('kill-session', '-t', S)

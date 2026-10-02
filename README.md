@@ -59,6 +59,8 @@ Which adult? Care comes first: a pet raised with at most one care mistake and fi
 
 Open the device with `/tama`. Its buttons have hotkeys while the pane has the keyboard. Click the screen to pat your pet; after that click, the same keys work on the screen.
 
+<p align="center"><img src="docs/pane.gif" width="560" alt="The device pane in a terminal: Mochi the Refactopus eats a rice ball, its bugs are washed away, it plays the left-or-right game and eats a lollipop"></p>
+
 | Key | Command | What it does |
 | --- | --- | --- |
 | `f` | `/tama feed` | A meal: one heart of food, one gram |
@@ -77,7 +79,7 @@ What to know:
 - **Bugs** show up about half an hour after a meal and now and then on their own. Leave them lying around and it gets **sick**.
 - It **calls** you (`!` on the device, a line under the prompt) when it is hungry, bored, sick, buried in bugs, or throwing a **tantrum**. A call left unanswered for 15 awake minutes is a **care mistake**.
 - In **classic** mode, half a day of hard neglect (starving and miserable, or sick) and it leaves for the cloud. It gets a place in the hall of fame (`/tama history`), and a new egg arrives (`/tama new`). Prefer it never leave? `/tama mode gentle`.
-- Going away for a while? **`/tama vacation on`** stops its clock until you are back.
+- Going away for a while? **`/tama vacation on`** stops its clock until you are back: no hunger, no aging, no growing.
 
 ## While Claude works
 
@@ -115,7 +117,7 @@ Above the prompt, your pet strolls along a strip of braille dots while Claude wo
 | `/tama vacation on\|off` | Stop its clock while you are away |
 | `/tama mode classic\|gentle` | Gentle: it never leaves, however neglected |
 | `/tama spinner on\|off` | Its face beside the spinner |
-| `/tama sound on\|off` | Beeps when it calls (played on the machine Claude Code runs on) |
+| `/tama sound on\|off` | Beeps when it calls (macOS, played on the machine Claude Code runs on) |
 | `/tama new · reset` | A new egg once it has left; start over (it asks first) |
 
 Every command runs at once, even while Claude is working, and prints nothing into the conversation.
@@ -162,7 +164,7 @@ claude --plugin-dir ./cc-tamagotchi
 
 ```bash
 claude --plugin-dir .            # loads the mod and reloads it on every save
-claude plugin test .             # 39 tests, no session or network needed
+claude plugin test .             # the tests: no session, sign-in or network needed
 claude plugin validate ./.claude-plugin/plugin.json
 ```
 
@@ -180,7 +182,7 @@ tests/              claude plugin test
 scripts/            the README's pictures, drawn from the mod's own code
 ```
 
-Ideas, sprites and new adults are welcome. Open an issue or a pull request.
+Ideas, sprites and new adults are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) for how a creature is drawn and added, or [open an issue](https://github.com/davidurco/cc-tamagotchi/issues/new/choose).
 
 ---
 
